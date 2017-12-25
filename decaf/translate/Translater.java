@@ -325,6 +325,15 @@ public class Translater {
 		append(Tac.genLoadImm4(dst, Temp.createConstTemp(imm)));
 		return dst;
 	}
+	
+	public Temp genComplex(Temp re, Temp im)
+	{
+		genParm(genLoadImm4(8));
+		Temp dst = genIntrinsicCall(Intrinsic.ALLOCATE);
+		genStore(re, dst, 0);
+		genStore(im, dst, 4);
+		return dst;
+	}
 
 	public Temp genLoadStrConst(String value) {
 		Temp dst = Temp.createTempI4();

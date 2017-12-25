@@ -62,6 +62,32 @@ public class TransPass2 extends Tree.Visitor {
 	public void visitBinary(Tree.Binary expr) {
 		expr.left.accept(this);
 		expr.right.accept(this);
+		if(expr.left.type.equal(BaseType.COMPLEX) || expr.right.type.equal(BaseType.COMPLEX))
+		{
+			Temp re = null;//= Temp.createTempI4();
+			Temp im = null;//= Temp.createTempI4();
+
+			Temp re1 = expr.left.type.equal(BaseType.COMPLEX)? tr.genLoad(expr.left.val, 0) : expr.left.val;
+			Temp im1 = expr.left.type.equal(BaseType.COMPLEX)? tr.genLoad(expr.left.val, 4) : tr.genLoadImm4(0);
+			Temp re2 = expr.right.type.equal(BaseType.COMPLEX)? tr.genLoad(expr.right.val, 0) : expr.right.val;
+			Temp im2 = expr.right.type.equal(BaseType.COMPLEX)? tr.genLoad(expr.right.val, 4) : tr.genLoadImm4(0);
+
+			switch (expr.tag)
+			{
+				case Tree.PLUS:
+					re = tr.genAdd(re1, re2);
+					im = tr.genAdd(im1, im2);
+					break;
+				case Tree.MUL:
+					re = tr.genSub(tr.genMul(re1, re2), tr.genMul(im1, im2));
+					im = tr.genAdd(tr.genMul(re1, im2), tr.genMul(re2, im1));
+					break;
+			}
+
+			expr.val = tr.genComplex(re, im);
+		}
+		else
+
 		switch (expr.tag) {
 		case Tree.PLUS:
 			expr.val = tr.genAdd(expr.left.val, expr.right.val);
@@ -125,23 +151,27 @@ public class TransPass2 extends Tree.Visitor {
 	public void visitAssign(Tree.Assign assign) {
 		assign.left.accept(this);
 		assign.expr.accept(this);
+
+		Temp ae = assign.expr.val;
+
+		if (assign.expr.type.equal(BaseType.COMPLEX))
+			ae = tr.genComplex(tr.genLoad(ae, 0), tr.genLoad(ae, 4));
+
 		switch (assign.left.lvKind) {
 		case ARRAY_ELEMENT:
 			Tree.Indexed arrayRef = (Tree.Indexed) assign.left;
 			Temp esz = tr.genLoadImm4(OffsetCounter.WORD_SIZE);
 			Temp t = tr.genMul(arrayRef.index.val, esz);
 			Temp base = tr.genAdd(arrayRef.array.val, t);
-			tr.genStore(assign.expr.val, base, 0);
+			tr.genStore(ae, base, 0);
 			break;
 		case MEMBER_VAR:
 			Tree.Ident varRef = (Tree.Ident) assign.left;
-			tr.genStore(assign.expr.val, varRef.owner.val, varRef.symbol
-					.getOffset());
+			tr.genStore(ae, varRef.owner.val, varRef.symbol.getOffset());
 			break;
 		case PARAM_VAR:
 		case LOCAL_VAR:
-			tr.genAssign(((Tree.Ident) assign.left).symbol.getTemp(),
-					assign.expr.val);
+			tr.genAssign(((Tree.Ident) assign.left).symbol.getTemp(),ae);
 			break;
 		}
 	}
@@ -154,6 +184,11 @@ public class TransPass2 extends Tree.Visitor {
 			break;
 		case Tree.BOOL:
 			literal.val = tr.genLoadImm4((Boolean)(literal.value) ? 1 : 0);
+			break;
+		case Tree.COMPLEX:
+			literal.val = tr.genComplex(tr.genLoadImm4(0), 
+					tr.genLoadImm4(((Integer)literal.value).intValue())
+					);
 			break;
 		default:
 			literal.val = tr.genLoadStrConst((String)literal.value);
@@ -172,8 +207,22 @@ public class TransPass2 extends Tree.Visitor {
 		case Tree.NEG:
 			expr.val = tr.genNeg(expr.expr.val);
 			break;
-		default:
+		case Tree.NOT:
 			expr.val = tr.genLNot(expr.expr.val);
+			break;
+		case Tree.RE:
+			expr.val = tr.genLoad(expr.expr.val, 0);
+			break;
+		case Tree.IM:
+			expr.val = tr.genLoad(expr.expr.val, 4);
+			break;
+		case Tree.COMPCAST:
+			Temp comp = tr.genComplex(expr.expr.val, tr.genLoadImm4(0));
+			expr.val = comp;	
+			break;
+		default:
+			System.out.println("????");
+			assert(false);
 		}
 	}
 
@@ -227,6 +276,26 @@ public class TransPass2 extends Tree.Visitor {
 			} else if (r.type.equal(BaseType.STRING)) {
 				tr.genIntrinsicCall(Intrinsic.PRINT_STRING);
 			}
+		}
+	}
+
+	@Override
+	public void visitPrintComp(Tree.PrintComp printCompStmt)
+	{
+		for (Tree.Expr r : printCompStmt.exprs) 
+		{
+			r.accept(this);
+			tr.genParm(tr.genLoad(r.val, 0));
+			tr.genIntrinsicCall(Intrinsic.PRINT_INT);
+			
+			tr.genParm(tr.genLoadStrConst("+"));
+			tr.genIntrinsicCall(Intrinsic.PRINT_STRING);
+			
+			tr.genParm(tr.genLoad(r.val, 4));
+			tr.genIntrinsicCall(Intrinsic.PRINT_INT);
+			
+			tr.genParm(tr.genLoadStrConst("j"));
+			tr.genIntrinsicCall(Intrinsic.PRINT_STRING);
 		}
 	}
 
