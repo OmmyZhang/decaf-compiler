@@ -156,8 +156,8 @@ public class TransPass2 extends Tree.Visitor {
 
 		Temp ae = assign.expr.val;
 
-		if (assign.expr.type.equal(BaseType.COMPLEX))
-			ae = tr.genComplex(tr.genLoad(ae, 0), tr.genLoad(ae, 4));
+		//if (assign.expr.type.equal(BaseType.COMPLEX))
+		//	ae = tr.genComplex(tr.genLoad(ae, 0), tr.genLoad(ae, 4));
 
 		switch (assign.left.lvKind) {
 		case ARRAY_ELEMENT:
