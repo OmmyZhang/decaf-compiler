@@ -9,6 +9,7 @@ import decaf.symbol.Variable;
 import decaf.tac.Label;
 import decaf.tac.Temp;
 import decaf.type.BaseType;
+import decaf.type.ClassType;
 
 public class TransPass2 extends Tree.Visitor {
 
@@ -32,7 +33,8 @@ public class TransPass2 extends Tree.Visitor {
 
 	@Override
 	public void visitMethodDef(Tree.MethodDef funcDefn) {
-		if (!funcDefn.statik) {
+		if (!funcDefn.statik) 
+		{
 			currentThis = ((Variable) funcDefn.symbol.getAssociatedScope()
 					.lookup("this")).getTemp();
 		}
@@ -244,6 +246,12 @@ public class TransPass2 extends Tree.Visitor {
 	}
 
 	@Override
+	public void visitSuperExpr(Tree.SuperExpr superExpr) {
+		superExpr.val = currentThis;
+	}
+
+
+	@Override
 	public void visitReadIntExpr(Tree.ReadIntExpr readIntExpr) {
 		readIntExpr.val = tr.genIntrinsicCall(Intrinsic.READ_INT);
 	}
@@ -357,6 +365,16 @@ public class TransPass2 extends Tree.Visitor {
 								.getReturnType());
 			} else {
 				Temp vt = tr.genLoad(callExpr.receiver.val, 0);
+				
+				if(callExpr.receiver.tag == Tree.THISEXPR 
+						|| callExpr.receiver.tag == Tree.SUPEREXPR)
+				{
+					ClassType ct = (ClassType)callExpr.receiver.type;
+					if(callExpr.receiver.tag == Tree.SUPEREXPR)
+						ct = ct.getParentType();
+					vt = tr.genLoadVTable(ct.getSymbol().getVtable());
+				}
+				
 				Temp func = tr.genLoad(vt, callExpr.symbol.getOffset());
 				callExpr.val = tr.genIndirectCall(func, callExpr.symbol
 						.getReturnType());
