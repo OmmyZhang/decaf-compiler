@@ -1,15 +1,19 @@
 package decaf.translate;
 
 import java.util.Stack;
+import java.util.Iterator;
 
 import decaf.tree.Tree;
 import decaf.backend.OffsetCounter;
 import decaf.machdesc.Intrinsic;
 import decaf.symbol.Variable;
+import decaf.symbol.Class;
+import decaf.symbol.Symbol;
 import decaf.tac.Label;
 import decaf.tac.Temp;
 import decaf.type.BaseType;
 import decaf.type.ClassType;
+import decaf.scope.ClassScope;
 
 public class TransPass2 extends Tree.Visitor {
 
@@ -101,9 +105,11 @@ public class TransPass2 extends Tree.Visitor {
 			expr.val = tr.genMul(expr.left.val, expr.right.val);
 			break;
 		case Tree.DIV:
+			tr.genCheckDivByZero(expr.right.val);
 			expr.val = tr.genDiv(expr.left.val, expr.right.val);
 			break;
 		case Tree.MOD:
+			tr.genCheckDivByZero(expr.right.val);
 			expr.val = tr.genMod(expr.left.val, expr.right.val);
 			break;
 		case Tree.AND:
@@ -491,6 +497,69 @@ public class TransPass2 extends Tree.Visitor {
 	public void visitNewClass(Tree.NewClass newClass) {
 		newClass.val = tr.genDirectCall(newClass.symbol.getNewFuncLabel(),
 				BaseType.INT);
+	}
+	
+	@Override
+	public void visitSCopy(Tree.SCopy sc)
+	{
+		sc.expr.accept(this);
+		sc.val = tr.genDirectCall(
+				((ClassType)sc.expr.type)
+				.getSymbol().getNewFuncLabel(),
+				BaseType.INT);
+		ClassScope cs = ((ClassType)sc.expr.type)
+				.getSymbol().getAssociatedScope();
+
+		Iterator<Symbol> iter = cs.iterator();
+		Temp tmp = Temp.createTempI4();
+		while(iter.hasNext())
+		{
+			Symbol sym = iter.next();
+		//	System.out.println(sym);
+			if(sym.isVariable())
+			{
+				int offset =((Variable)sym).getOffset();
+				tr.genAssign(tmp, tr.genLoad(sc.expr.val, offset));
+				tr.genStore(tmp, sc.val, offset);
+			}
+		}
+	}
+
+	@Override
+	public void visitDCopy(Tree.DCopy dc)
+	{
+		dc.expr.accept(this);
+		dc.val = deepCopy((ClassType)dc.expr.type, dc.expr.val);
+	}
+
+	private Temp deepCopy(ClassType srcType, Temp srcVal )
+	{
+		Temp dst;
+		dst = tr.genDirectCall(
+				srcType.getSymbol().getNewFuncLabel(),
+				BaseType.INT);
+		
+		ClassScope cs = ((ClassType)srcType)
+				.getSymbol().getAssociatedScope();
+
+
+		Iterator<Symbol> iter = cs.iterator();
+		Temp tmp = Temp.createTempI4();
+		while(iter.hasNext())
+		{
+			Symbol sym = iter.next();
+//			System.out.println(sym);
+			if(sym.isVariable())
+			{
+				int offset =((Variable)sym).getOffset();
+				if(sym.getType().isClassType())
+					tr.genAssign(tmp, deepCopy((ClassType)sym.getType(), srcVal));
+				else
+					tr.genAssign(tmp, tr.genLoad(srcVal, offset));
+				tr.genStore(tmp, dst, offset);
+			}
+		}
+		return dst;
 	}
 
 	@Override
